@@ -786,3 +786,156 @@ window.addMouseListener(object: MouseAdapter() {
 `val listener = ActionListener { println("clicked") }`
 
 
+### 类委托:使用`by`关键字
+
+> 常常需要向其他类添加一些行为，即使并没有被设计为可扩展的。一个常用的实现方式是装饰器设计模式，这种模式就是创建一个新类，实现与原始类一样的接口并将原来的类的实例作为一个字段保存。与原始类拥有同样的行为的方法不用被修改，只需要直接转发给原始类。这种方式的一个缺点是需要相当多的样板代码
+
+```kotlin
+class DelegatingCollection<T> : Collection<T> {
+    private val innerList = arrayListOf<T>()
+    
+    override val size = innerList.size
+    override fun contains(element: T) = innerList.contains(element)
+    override fun containsAll(elements: Collection<T>) = innerList.containsAll(elements)
+    override fun isEmpty() = innerList.isEmpty()
+    override fun iterator() = innerList.iterator()    
+}
+```
+
+
+* kotlin为了消除这些样板代码可以通过添加`by`来将这些需重写的方法委托出去,需要重写的部分就重写
+
+```kotlin
+class DelegatingCollection<T>(
+        val innerList: Collection<T> = arrayListOf()
+) : Collection<T> by innerList{ // 委托给innerList
+    override fun iterator(): Iterator<T> {// 重写
+        println("some code")
+        return innerList.iterator()
+    }
+}
+```
+
+
+### `object`：将声明一个类与创建一个实例结合起来
+
+> 应用场景：
+    - 对象声明是定义单例的一种方式
+    - 伴生对象可以持有工厂方法和其他与这个类相关，但在调用时不依赖类实例的方法。他们的成员可以通过类名来访问
+    - 对象表达式用来替代java的匿名内部类
+
+#### 对象声明
+
+* 对象声明将类声明与该类的单一实例声明结合到了一起
+* 与普通类不同的是：不能有构造方法。
+* 对象声明在定义时就立刻创建了，不需要在代码的其他地方调用构造方法
+* 可以继承和实现接口
+* 可以在任何使用普通对象的地方使用单例对象
+* 可以在类中添加一个对象声明，这样的对象同样是单例的，例如:在类中添加一个用来比较特定对象的比较器
+
+```kotlin
+object User {
+    val name = "ysj"
+
+    fun hello() = println("Hello ! ")
+}
+
+object CaseInsensitiveFileComparator : Comparator<File> {
+    override fun compare(file1: File, file2: File) =
+        file1.path.compareTo(file2.path)
+}
+
+fun main(args: Array<String>) {
+    User.hello()
+}
+```
+
+#### 伴生对象
+
+> * kotlin中不能拥有静态成员：java的static关键字并不是kotlin的一部分，作为替代，kotlin依赖包级别函数，对象声明。
+> * 如果需要写一个可以在没有类实例的情况下，调用类内部的函数或访问private的成员，可以将其写成那个类中的对象声明的成员
+
+* 在类中定义的对象之一可以使用`companion`。这样就获得了直接通过容器类名称来访问这个对象的方法和属性的能力
+
+```kotlin
+class Pizza private constructor(val name: String = "default") {
+    companion object {// 声明伴生对象
+        fun newPizza(name: String) = println("$name Pizza")// 工厂方法
+        fun newApplePizza() = println("apple Pizza")// 工厂方法
+    }
+}
+```
+
+> 但是，如果需要扩展这样的类，使用多个构造方法也许是一个更好的选择，因为伴生对象成员在子类中不能被重写
+
+* 伴生对象也可以有名字。并且可以实现接口。
+* 如果伴生对象没有名字，默认的名字是Companion, 如果自己定义了一个名字，则这个名字会覆盖Companion
+
+```kotlin
+class Person(val name: String) {
+    companion object Loader {
+        fun fromJSON(jsonText: String): Person {
+            // some code
+            return Person("ysj")
+        }
+    }
+}
+
+fun main(args: Array<String>) {
+    val person1 = Person.Loader.fromJSON("{name: 'ysj'}") // 可以指明伴生对象的类名
+    val person2 = Person.fromJSON("{name: 'ysj'}") // 也可以不指明伴生对象的类名
+}
+```
+
+
+> 伴生对象会编译成常规对象，类中的一个引用了他的实例的静态字段
+
+* 伴生对象的扩展：可以通过扩展函数的技巧为伴生对象定义一个扩展函数。
+* 为了能够为你的类定义扩展，必须在其中声明一个伴生对象，即使是一个空的
+
+```kotlin
+class Person(val name: String) {
+    companion object { // 空的伴生对象
+    }
+}
+
+fun Person.Companion.fromJSON(jsonText: String): Person {
+    // some code
+    return Person("ysj")
+}
+
+fun main(args: Array<String>) {
+    val person1 = Person.fromJSON("{name: 'ysj'}")
+    val person2 = Person.fromJSON("{name: 'ysj'}")
+}
+```
+
+#### 对象表达式
+
+> object关键字不仅仅能用来声明单例式的对象，还能用来声明匿名对象。代替了java中的匿名内部类
+
+* 除了去掉了对象的名字外，语法是与对象声明相同。对象表达式声明了一个类并创建了该类的实例，但是并没有给这个类或实例分配一个名字。
+* 如果需要给对象分配一个名字，可以将其存储到一个变量中
+* kotlin的匿名对象可以实现接口
+* 与对象声明不同的是，匿名对象不是单例的。每次对象表达式被执行都会创建一个新的对象实例。
+* 对象表达式中的代码可以访问创建他的函数中的变量。但是与java不同，访问并没有被限制在final变量，还可以在对象表达式中修改变量的值。
+* 如果只需要实现一个单方法的接口，就行Runnable，可以将实现写做lambda
+
+```kotlin
+fun countClicks(window: Window) {
+    var clickCount = 0 // 局部变量
+    
+    window.addMouseListener(object: MouseAdapter() {
+        override fun mouseClicked(e: MouseEvent?) {
+            clickCount++ // 更新变量的值
+        }
+    })
+    
+    val listener = object: MouseAdapter() {
+        override fun mouseClicked(e: MouseEvent?) {
+            clickCount++ // 更新变量的值
+        }
+    }
+}
+```
+
