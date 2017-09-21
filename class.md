@@ -633,10 +633,19 @@ val box = Box(1)
 
 * 在java中，用的是关键字来表达一样的概念：<T extends Number> T sum(List<T> list)
 * 一旦指定了类型形参T的上界，就可以把类型T的值当作他的上界(类型)的值使用。
-* 注意：类型形参默认上界是Any?，所以默认是可空的。如果想确保类型T是非空的可以指定相应的非空类型作为上界，例如：Any
+* 注意：类型形参默认上界是Any?，所以默认是可空的。如果想确保类型T是非空的可以指定相应的非空类型作为上界，例如：Any。
+* 在尖括号内只能指定一个上限。如果相同类型的参数需要多个上限，我们需要一个单独的where子句：
+
 
 ```kotlin
-fun <T : Number> List<T>.sum(): T  // 约束了类型实参的上界必须是Number
+// 在冒号后面指定的类型是上限：只有Comparable<T>的子类型可以替代T.例如
+fun <T : Comparable<T>> sort(list: List<T>) {
+    // ...
+}
+
+sort(listOf(1, 2, 3)) // OK. Int is a subtype of Comparable<Int>
+sort(listOf(HashMap<Int, String>())) // Error: HashMap<Int, String> is not a subtype of Comparable<HashMap<Int, String>>
+
 
 fun <T : Comparable<T>> max(first: T, second: T): T {
     return if (first > second) first else second // 注意：first > second的简写会根据kotlin的运算符约定被编译成first.compareTo(second) > 0, 这种比较之所以可行，是因为first的类型T继承自Comparable<T>
@@ -713,11 +722,19 @@ false
 
 ####  协变——保留子类化类型参数，逆变——反转子类化类型参数
 
-* java引入了通配符?来解决，编译器无法知道某个参数可以被消费还是生产
-* Consumer in T 对应于java的<? super T>, Producer out T 对应于java的<? extends T>
-* kotlin有一种方法来解释这种事情给编译器。这称为Declaration-site variance：我们可以注释Source的类型参数T，以确保它只returned (produced) 从Source <T>的成员，并没有消耗。为此，我们提供`out`修饰符：
+> 一个协变类是一个泛型类(以Producer<T>为例)，对这种类来说，如果A是B的子类型，Producer<A>就是Producer<B>的子类型。子类型化被保留了。
+
+* kotlin中，**声明类的某个类型参数是可以协变的**，在该类型参数的名称前加上`out`关键字即可
+* **out位置**: 如果函数是把T当成返回类型，我们说他在out位置，这种情况下，该函数只能生产类型T的值，而不能消费他们。
+* **in位置**: 如果T用作函数参数的类型，他就在in位置，这样的函数可以消费类型为T的值。
+* out的两层含义：子类型化会被保留(Producer<Cat>是Producer<Animal>的子类型)。T只能用在out位置
 
 ```kotlin
+interface List<out T>: Collection<T> {
+    operator fun get(index: Int): T // T在out位置
+}
+
+
 abstract class Source<out T> { // Source类是T的生产者,而不能消费T
     abstract fun nextT(): T
 }
@@ -728,13 +745,14 @@ fun demo(strs: Source<String>) {
 }
 ```
 
-> The general rule is: when a type parameter T of a class C is declared out, it may occur only in out-position in the members of C, but in return C<Base> can safely be a supertype of C<Derived>.
-> 可以这样认为：T是一个协变类型的参数。C是T的生产者，而不是T的消费者。
+* 还要留意的是，位置规则只覆盖了类外部可见API。私有方法的参数既不在in位置也不在out位置。变型规则只会防止外部使用者对类的无用但不会对类自己的实现起作用。
 
 * 与此类似的：提供了`in`修饰符
+* 对一个逆变类来说，他的子类型化关系与用作类型实参的类的子类型化关系是相反的。
+* 如果B是A的子类型，nameConsumer<A>就是Consumer<B>的子类型。我们称子类型化被反转了。
 
 ```kotlin
-abstract class Comparable<in T> {// T只能被消耗而不会产生。
+abstract class Comparable<in T> {// T只被消耗
     abstract fun compareTo(other: T): Int
 }
 
@@ -742,70 +760,47 @@ fun demo(x: Comparable<Number>) {
     x.compareTo(1.0) // 1.0 has type Double, which is a subtype of Number
     // Thus, we can assign x to a variable of type Comparable<Double>
     val y: Comparable<Double> = x // OK!
+    // 这说明Comparable<Number>是Comparable<Double>的子类型，其中Number是Double的父类型。逆变反转了子类化类型参数
 }
 ```
 
-#### 泛型function
+#### 在类型出现的地方指定变型
+
+> `<in T>` 对应于java的`<? super T>`, `<out T>` 对应于java的`<? extends T>`
+
+* <T>默认是<out T>
+* 可以为类型声明中类型参数任意的用法指定变型修饰符，这些用法包括：形参类型、局部变量类型、函数返回类型等。例如：我们说source不说一个常规的MutableList，而是一个受限的MutableList。只能调用他在out位置能上使用的方法。destination只能调用他在in位置上能使用的方法
+
+```kotlin
+fun <T> copyData(source: MutableList<out T>,
+                 destination: MutableList<in T>) {
+    for (item in source) {
+        destination.add(item)
+    }
+}
+```
+
+#### 星号投影`*`——使用*代替类型参数
+
+> 类似于java的通配符`?`
+
+* 编译器会把<*>当初<out Any?>，不知道他是什么类型，但仍能安全的访问他
+*  Foo<*> is equivalent to Foo<out TUpper> for reading values and to Foo<in Nothing> for writing values.
+
+```kotlin
+fun printFirst(list: List<*>) = list?.first()
+```
+
+#### 泛型方法
 
 ```kotlin
 fun <T> singletonList(item: T): List<T> {
     // ...
 }
 
-fun <T> T.basicToString() : String {  // extension function
-    // ...
-}
-
 val l = singletonList<Int>(1)
  ```
 
-#### Upper bounds
-
-最常见的约束类型是对应于Java的extends关键字的上限：
-
-```kotlin
-fun <T : Comparable<T>> sort(list: List<T>) {
-    // ...
-}
-```    
-
-* 在冒号后面指定的类型是上限：只有Comparable<T>的子类型可以替代T.例如
-
-```kotlin
-sort(listOf(1, 2, 3)) // OK. Int is a subtype of Comparable<Int>
-sort(listOf(HashMap<Int, String>())) // Error: HashMap<Int, String> is not a subtype of Comparable<HashMap<Int, String>>
-```
-
-* 默认上限（如果没有指定）为Any？在尖括号内只能指定一个上限。如果相同类型的参数需要多个上限，我们需要一个单独的where子句：
-
-```kotlin
-fun <T> cloneWhenGreater(list: List<T>, threshold: T): List<T>
-    where T : Comparable,
-          T : Cloneable {
-  return list.filter { it > threshold }.map { it.clone() }
-}
-```
-
-#### Star-projections
-
-Sometimes you want to say that you know nothing about the type argument, but still want to use it in a safe way. The safe way here is to define such a projection of the generic type, that every concrete instantiation of that generic type would be a subtype of that projection.
-
-Kotlin provides so called star-projection syntax for this:
-
-- For Foo<out T>, where T is a covariant type parameter with the upper bound TUpper, Foo<*> is equivalent to Foo<out TUpper>. It means that when the T is unknown you can safely read values of TUpper from Foo<*>.
-- For Foo<in T>, where T is a contravariant type parameter, Foo<*> is equivalent to Foo<in Nothing>. It means there is nothing you can write to Foo<*> in a safe way when T is unknown.
-- For Foo<T>, where T is an invariant type parameter with the upper bound TUpper, Foo<*> is equivalent to Foo<out TUpper> for reading values and to Foo<in Nothing> for writing values.
-
-  If a generic type has several type parameters each of them can be projected independently. For example, if the type is declared as interface Function<in T, out U> we can imagine the following star-projections:
-
-- Function<*, String> means Function<in Nothing, String>;
-- Function<Int, *> means Function<Int, out Any?>;
-- Function<*, *> means Function<in Nothing, out Any?>.
-Note: star-projections are very much like Java's raw types, but safe. 
-
-
-
-### Nested and Inner Classes——嵌套类和内部类
 
 #### 嵌套类
 
