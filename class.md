@@ -612,6 +612,8 @@ fun eval(expr: Expr): Double = when(expr) {
 
 ### 泛型（Generics）
 
+> kotlin从一开始就有泛型，所以他不支持原生态类型，类型参数必须定义
+
 ```kotlin
 class Box<T>(t: T) {
     var value = t
@@ -623,7 +625,93 @@ val box: Box<Int> = Box<Int>(1)
 val box = Box(1)
 ```
 
-####  Declaration-site variance
+
+#### 类型参数约束
+
+> 类型参数约束可以限制作为泛型类和泛型函数的类型实参的类型。
+> 如果把一个类型指定为泛型类型形参的上界约束，在泛型类型具体的初始化中，其对应的类型实参就必须是这个具体类型或者他的子类型。
+
+* 在java中，用的是关键字来表达一样的概念：<T extends Number> T sum(List<T> list)
+* 一旦指定了类型形参T的上界，就可以把类型T的值当作他的上界(类型)的值使用。
+* 注意：类型形参默认上界是Any?，所以默认是可空的。如果想确保类型T是非空的可以指定相应的非空类型作为上界，例如：Any
+
+```kotlin
+fun <T : Number> List<T>.sum(): T  // 约束了类型实参的上界必须是Number
+
+fun <T : Comparable<T>> max(first: T, second: T): T {
+    return if (first > second) first else second // 注意：first > second的简写会根据kotlin的运算符约定被编译成first.compareTo(second) > 0, 这种比较之所以可行，是因为first的类型T继承自Comparable<T>
+}
+
+// 极少数情况下，需要一个类型参数上指定多个约束，这时需要稍微不同的语法：
+fun <T> ensureTrailingPeriod(seq: T) 
+        where T: CharSequence, T: Appendable {  
+    if (!seq.endsWith('.'))
+        seq.append('.')
+}
+``` 
+
+
+#### 运行时的泛型：擦除和实化类型参数
+
+> JVM上的泛型一般是通过类型擦除实现的，就是说泛型类实例的类型实参在运行时是不保留的。
+> 可以声明一个inline函数，使其类型实参不被擦除(kotlin中称为'实化')。
+
+* 因为类型实参没有被存储下来，不能检查他们，例如：不能判断一个列表是一个包含字符串的列表还是包含其他对象的列表。一般而言，在is检查中不可能使用类型实参中的类型。
+
+```kotlin
+>>> if (value is List<String>)
+ERROR: Cannot check for instance of erased type
+```
+
+* 如果想检查一个值是否是列表，而不是set或其他对象，可以使用星号投影语法来做这种检查，类似于java的通配符
+
+```kotlin
+// 检查了value是否是List，而并没有得到关于他元素的类型的任何信息
+if (value is List<*>) // 类似于java的List<?>
+```
+
+* 对泛型类型做转换
+
+```kotlin
+// 对已知类型作转换：
+fun printSum(c: Collection<Int>) {
+    if (c is List<Int>)  // 在编译期就确定了集合包含的是整型数字
+        println(intList.sum())
+}
+
+
+// 对未知类型作转换：
+// 转换会成功，但无法判断实参是不是一个List<Int>，无论如何函数sum都会在这个列表上调用。
+fun printSum(c: Collection<*>) {
+    var intList = c as? List<Int> // 这里会有警告:Unchecked cast: List<*> to List<Int>
+                    ?: throw IllegalArgumentException("List is expected ! ")
+    println(intList.sum())
+}
+
+>>> printSum(setOf(1, 2, 3))
+>>> IllegalArgumentException: List is expected // Set不是列表，所以抛出异常
+```
+
+#### 声明带实化类型参数的函数
+
+> 内联函数的类型形参能被实化，这意味着可以在运行时引用时机的类型实参。
+> 如果用`inline`关键字标记一个函数，编译器会把每一次函数调用换成函数实际的代码实现。每次调用带实化类型参数的函数时，编译器都知道这次特定调用中用作类型实参的确切类型。因此，编译器可以生产引用作为类型实参的 具体类 的字节码。如果该函数是用了lambda实参，lambda的代码也会内联，所以不会创建任何匿名类，提升一些性能。
+> 注意：带reified类型参数的inline函数不能在java代码中调用
+
+* 把函数声明成`inline`并用`reified`标记类型参数，类型参数不会在运行时被擦除
+，就能检查value是否是T的实例
+
+```kotlin
+fun <reified T> isA(value: Any) = value is T
+
+>>> println(isA<String>("abc"))
+true
+>>> println(isA<String>(123))
+false
+```
+
+
+####  协变——保留子类化类型参数，逆变——反转子类化类型参数
 
 * java引入了通配符?来解决，编译器无法知道某个参数可以被消费还是生产
 * Consumer in T 对应于java的<? super T>, Producer out T 对应于java的<? extends T>
