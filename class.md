@@ -415,30 +415,72 @@ const val SUBSYSTEM_DEPRECATED: String = "This subsystem is deprecated"
 @Deprecated(SUBSYSTEM_DEPRECATED) fun foo() { ... }
 ```
 
-### Late-Initialized Properties
+### `lateinit`延迟初始化的属性
 
-Normally, properties declared as having a non-null type must be initialized in the constructor. However, fairly often this is not convenient. For example, properties can be initialized through dependency injection, or in the setup method of a unit test. In this case, you cannot supply a non-null initializer in the constructor, but you still want to avoid null checks when referencing the property inside the body of a class.
+> kotlin通常要求你在构造方法中初始化所有属性，如果某个属性时非空类型，你就必须提供非空的初始化值。否则，你就必须使用可空类型。如果这样做，则该属性每次访问都需要null检查或者`!!`运算符。
+> 为了解决这个问题，可以将该属性声明为`lateinit`属性。注：延迟初始化属性都是var，因为需要在构造方法外修改他的值。而val会被编译成必须在构造方法中初始化的final字段。
 
-To handle this case, you can mark the property with the lateinit modifier:
+* 下面是一个junit注入的例子：在构造方法外初始化属性
 
 ```kotlin
-public class MyTest {
-    lateinit var subject: TestSubject
+class MyServiceTest {
+    private lateinit var myService: MyService
 
-    @SetUp fun setup() {
-        subject = TestSubject()
+    @Before
+    fun setUp() {
+        myService = MyService()
     }
-
-    @Test fun test() {
-        subject.method()  // dereference directly
+    
+    @Test
+    fun hi() {
     }
 }
 ```
 
-The modifier can only be used on var properties declared inside the body of a class (not in the primary constructor), and only when the property does not have a custom getter or setter. The type of the property must be non-null, and it must not be a primitive type.
+> `lateinit`属性常见的一种用法是依赖注入。
 
-Accessing a lateinit property before it has been initialized throws a special exception that clearly identifies the property being accessed and the fact that it hasn't been initialized.
 
+### 解构
+
+```kotlin
+val (name, age) = person 
+// 上面的解构相当于
+val name = person.component1()
+val age = person.component2()
+```
+
+```kotlin
+for ((key, value) in map) {
+   // do something with the key and the value
+}
+
+map.mapValues { (key, value) -> "$value!" }// 用在lambda中的解构
+
+// 可以分别指定整个结构化参数或特定组件的类型：
+map.mapValues { (_, value): Map.Entry<Int, String> -> "$value!" }
+map.mapValues { (_, value: String) -> "$value!" }
+```
+
+* 为了让上面的for循环遍历map工作，需要：
+    - 将map表现为一个sequence, 并提供一个`iterator()`函数;
+    - 通过提供函数component1（）和component2（）将每个元素呈现为一对。 实际上，标准库提供了这样的扩展：
+`operator fun <K, V> Map<K, V>.iterator(): Iterator<Map.Entry<K, V>> = entrySet().iterator()`
+`operator fun <K, V> Map.Entry<K, V>.component1() = getKey()`
+`operator fun <K, V> Map.Entry<K, V>.component2() = getValue()`
+
+* `componentN()`函数需要使用operator关键字进行标记，以便在解构声明中使用它们。
+ 
+* 如果在解构声明中不需要变量，则可以放置下划线而不是其名称：`val (_, status) = getResult()`
+ 
+* 注意：声明两个参数、声明一个解构的区别：
+
+```kotlin
+{ a -> ... } // one parameter
+{ a, b -> ... } // two parameters
+{ (a, b) -> ... } // a destructured pair
+{ (a, b), c -> ... } // a destructured pair and another parameter
+```
+ 
  
 ### 抽象类/方法
 
@@ -583,7 +625,7 @@ val olderJack = jack.copy(age = 2)
 
 ```kotlin
 val jane = User("Jane", 35) 
-val (name, age) = jane// 通过componentN()函数按相应的声明顺序解构
+val (name, age) = jane // 通过componentN()函数按相应的声明顺序解构
 println("$name, $age years of age") // prints "Jane, 35 years of age"
 ```
 
@@ -709,9 +751,10 @@ fun printSum(c: Collection<*>) {
 
 * 把函数声明成`inline`并用`reified`标记类型参数，类型参数不会在运行时被擦除
 ，就能检查value是否是T的实例
+* Normal functions (not marked as inline) can not have reified parameters.
 
 ```kotlin
-fun <reified T> isA(value: Any) = value is T
+fun <reified T> isA(value: Any) = value is T // 由于没有擦除类型参数，is检查是安全的了
 
 >>> println(isA<String>("abc"))
 true
@@ -802,7 +845,7 @@ val l = singletonList<Int>(1)
  ```
 
 
-#### 嵌套类
+### 嵌套类
 
 > Classes can be nested in other classes
 
@@ -863,6 +906,7 @@ window.addMouseListener(object: MouseAdapter() {
     }
 })
 ```
+
 
 * 如果对象是functional Java interface的实例（即具有单个抽象方法的Java接口），则可以使用前缀为接口类型的lambda表达式来创建它。
 
@@ -928,6 +972,7 @@ object CaseInsensitiveFileComparator : Comparator<File> {
         file1.path.compareTo(file2.path)
 }
 
+// 要引用对象，我们直接使用它的名字：
 fun main(args: Array<String>) {
     User.hello()
 }

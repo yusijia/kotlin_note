@@ -228,16 +228,74 @@ c = 3       // deferred assignment
 > 在kotlin中，==运算符是比较两个对象的默认方式，本质上是通过equals来比较两个对象的。因此，如果equals在你的类中被重写了，可以很安全的使用==来比较实例。
 > 在kotlin中，===运算符用来比较引用，和java中==比较对象引用的效果是一模一样的。
 
+* a == b会转换为:
+`a?.equals(b) ?: (b === null)`
+
+* 注意，在明确比较null时，无需优化代码：a == null, 他将自动转换为a === null。
+
 > 注意：kotlin中没有连等(例：a = b = 6)，因为这样不安全，可能b=6后被另一个线程修改，造成赋给a时可能不是6了
 
 ### 懒加载常量
 
+* lazy()是一个函数，它接受一个lambda并返回一个Lazy <T>的实例，它可以作为一个用于实现一个惰性属性的代理: 第一次调用get（）执行lambda传递给lazy（）并记住结果，后来调用get（）只是返回记忆结果。
+
 ```kotlin
-val p: String by lazy {
-    // compute the string
+val lazyValue: String by lazy {
+    println("computed!")
+    "Hello"
 }
+
+fun main(args: Array<String>) {
+    println(lazyValue)
+    println(lazyValue)
+}
+
+/*
+computed!
+Hello
+Hello
+*/
 ```
 
+* 默认情况下，the evaluation of lazy properties is synchronized: 该值仅在一个线程中计算，所有线程将看到相同的值。
+
+* Delegates.observable()接受两个参数：初始值和修改处理程序。每次分配给属性（执行分配之后），处理程序将被调用。它有三个参数：分配给一个属性，旧值和新值
+
+```kotlin
+import kotlin.properties.Delegates
+
+class User {
+    var name: String by Delegates.observable("<no name>") {
+        prop, old, new ->
+        println("$old -> $new")
+    }
+}
+
+fun main(args: Array<String>) {
+    val user = User()
+    user.name = "first"
+    user.name = "second"
+}
+/*
+<no name> -> first
+first -> second
+*/
+```
+
+* Storing Properties in a Map
+
+```kotlin
+class User(val map: Map<String, Any?>) {
+    val name: String by map
+    val age: Int     by map
+}
+
+// main: // Delegated properties take values from this map (by the string keys –– names of properties):
+val user = User(mapOf(
+    "name" to "John Doe",
+    "age"  to 25
+))
+```
 
 ## 字符串
 
@@ -480,6 +538,7 @@ fun <T: Any> printHashCode(t: T) {// 现在"T"不能为null了
 | Set      | setOf  | mutableSetOf、 hashSetOf、linkedSetOf、sortedSetOf |
 | Map      | mapOf  | mutableMapOf、 hashMapOf、linkedMapOf、sortedMapOf |
 
+* 注意`toList()`扩展方法返回的列表保证不会被改变。类似于java的Arrays.toList()
 
 ### 平台类型——为了与java的互操作
 
@@ -735,7 +794,7 @@ when {
 ```kotlin
 // in适用于区间也适用于集合
 
-for (i in 1..100) { ... }  [1, 100] 左闭右闭。
+for (i in 1..100) { ... }  [1, 100] 左闭右闭，1 <= i && i <= 100。
 for (i in 1 until 100) { ... } [1, 100) 左闭右开
 for (x in 2..10 step 2) { ... }
 for (x in 10 downTo 1) { ... }

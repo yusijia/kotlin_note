@@ -5,6 +5,9 @@
 * 语法：kotlin的lambda表达式始终用花括号包围. 例： `{x: Int, y: Int -> x + y}`
 * 可以遵循这样一条简单的规则：先不声明类型，等编译器报错后再指定他们。
 * 可以将lambda表达式存储在一个变量中，把这个变量当作普通函数对待
+* 如果函数的最后一个参数是lambda，可以将lambda写到圆括号之外，例：`fun temp(1){x -> x}`
+* 如果lambda是该函数的唯一参数，调用中的括号可以完全省略。
+* 可以使用正确的返回语法从lambda显式返回一个值。否则，隐式返回最后一个表达式的值。
 
 ```kotlin
 data class Person(val name: String, val age: Int)
@@ -20,9 +23,40 @@ fun main(args: Array<String>) {
     val sum = {x: Int, y: Int -> x + y}// 使用变量存储lambda，就没有可以推断出参数类型的上下文，所以必须显式的指定参数类型。
     println(sum(1, 2))
 }
+
+
+ints.filter {
+    val shouldFilter = it > 0 
+    shouldFilter // 隐式返回
+}
+
+ints.filter {
+    val shouldFilter = it > 0 
+    return@filter shouldFilter // 显式返回
+}
+// 一个不错的例子, 获取锁，并执行函数，然后释放锁
+fun <T> lock(lock: Lock, body: () -> T): T {
+    lock.lock()
+    try {
+        return body()
+    }
+    finally {
+        lock.unlock()
+    }
+}
+
+lock(Alock) { foo() }
 ```
 
+
+### `it`: 单个参数的隐式名称
+
+> 如果一个函数只有一个参数，它的声明可能会被省略（与`->`一起），它的名称将是`it`：
 > it约定能大大缩短你的代码，但不应该滥用他。尤其是在嵌套lambda的情况下，最好显式的声明每个lambda参数。否则，很难搞清楚it引用的到底是哪个值
+
+```kotlin
+ints.map { it * 2 }
+```
 
 ### 在lambda中使用函数参数以及修改局部变量
 
