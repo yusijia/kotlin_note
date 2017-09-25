@@ -237,7 +237,8 @@ c = 3       // deferred assignment
 
 ### 懒加载常量
 
-* lazy()是一个函数，它接受一个lambda并返回一个Lazy <T>的实例，它可以作为一个用于实现一个惰性属性的代理: 第一次调用get（）执行lambda传递给lazy（）并记住结果，后来调用get（）只是返回记忆结果。
+* lazy()是一个函数，它的参数是一个lambda，并返回一个Lazy <T>的实例，它可以作为一个用于实现一个惰性属性的代理: 第一次调用get（）执行lambda传递给lazy（）并记住结果，后来调用get（）只是返回记忆结果。
+* 默认情况下，lazy函数时线程安全的，该值仅在一个线程中计算，所有线程将看到相同的值。如果需要，可以设置其他选项来告诉他使用哪个锁。
 
 ```kotlin
 val lazyValue: String by lazy {
@@ -257,45 +258,6 @@ Hello
 */
 ```
 
-* 默认情况下，the evaluation of lazy properties is synchronized: 该值仅在一个线程中计算，所有线程将看到相同的值。
-
-* Delegates.observable()接受两个参数：初始值和修改处理程序。每次分配给属性（执行分配之后），处理程序将被调用。它有三个参数：分配给一个属性，旧值和新值
-
-```kotlin
-import kotlin.properties.Delegates
-
-class User {
-    var name: String by Delegates.observable("<no name>") {
-        prop, old, new ->
-        println("$old -> $new")
-    }
-}
-
-fun main(args: Array<String>) {
-    val user = User()
-    user.name = "first"
-    user.name = "second"
-}
-/*
-<no name> -> first
-first -> second
-*/
-```
-
-* Storing Properties in a Map
-
-```kotlin
-class User(val map: Map<String, Any?>) {
-    val name: String by map
-    val age: Int     by map
-}
-
-// main: // Delegated properties take values from this map (by the string keys –– names of properties):
-val user = User(mapOf(
-    "name" to "John Doe",
-    "age"  to 25
-))
-```
 
 ## 字符串
 
@@ -413,6 +375,8 @@ fun strLenSafe(s: String?): Int = s?.length ?: 0
 ### `as?`——安全转换
 
 * `as?`运算符尝试把值转换成指定的类型，如果值不是合适的类型就返回null
+
+`val aInt: Int? = a as? Int`
 
 ```kotlin
 class Person(val firstName: String, val lastName: String) {
@@ -845,7 +809,7 @@ fun test() {
 }
 ```
 
-
+`The type of the throw expression is the special type Nothing`
 
 ## with 关键字-在对象实例上调用多个方法
 
